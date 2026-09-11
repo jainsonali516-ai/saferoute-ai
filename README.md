@@ -67,13 +67,14 @@ prisma/
 
 ## What's real vs. simulated
 
-| Real (backed by API routes) | Simulated (demo data) |
+| Real (backed by live APIs, with safe fallback) | Simulated (demo data) |
 |---|---|
-| Trusted contacts (CRUD) | Weather, traffic, transport, activity signals |
-| Journey lifecycle (start/check-in/complete) | Route geometry, ETA, safety/context scores |
-| Preferences & privacy settings | Journey history, recommendation history, live-journey examples |
+| Route geometry, distance & ETA for the fastest route — [Mapbox Geocoding + Directions](https://docs.mapbox.com/api/navigation/directions/) when `MAPBOX_ACCESS_TOKEN` is set | Safer/Balanced route variants, segment naming when no real route is available |
+| Street-lighting signal per segment — [OpenStreetMap Overpass API](https://overpass-api.de/) (`lit` tag), free & keyless | Activity level, and lighting wherever OSM has no tagged data nearby |
+| Current weather near the destination — [OpenWeatherMap](https://openweathermap.org/api) when `WEATHER_API_KEY` is set | Traffic, transport availability, public activity signals |
+| Trusted contacts (CRUD), journey lifecycle (start/check-in/complete), preferences & privacy settings | Safety/context scores, journey history, recommendation history, live-journey examples |
 
-All of the above use in-memory demo stores (no database) scoped to an anonymous per-session cookie — data resets on server restart. This is intentional for a hackathon demo; see `prisma/schema.prisma` for the schema a real database would use.
+Every real integration degrades automatically to deterministic demo data if its API key/token is missing or a request fails — the app never breaks because a free tier is unavailable. The CRUD/lifecycle features use in-memory demo stores (no database) scoped to an anonymous per-session cookie — data resets on server restart. This is intentional for a hackathon demo; see `prisma/schema.prisma` for the schema a real database would use.
 
 ## Security
 

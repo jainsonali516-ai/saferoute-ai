@@ -25,8 +25,10 @@ import { pick, seededHash, seededRandom } from "@/lib/utils";
  *   With no token configured, or if geocoding/directions fails for any reason, this
  *   falls back to the synthetic generator below — the app must never break because a
  *   real API is unavailable. Only the Fastest route's distance/ETA/segments come from
- *   real map data; Safer/Balanced are still derived estimates layered on top of it,
- *   and the context/safety scoring below is always simulated (no free API provides that).
+ *   real map data; Safer/Balanced are still derived estimates layered on top of it.
+ *   Weather (see contextEngine.ts) is also real when WEATHER_API_KEY is set, sourced
+ *   from OpenWeatherMap for the destination; the rest of the context/safety scoring
+ *   is always simulated (no free API provides real crime/safety data).
  * - Context-aware risk/exposure scoring -> a trained ML model service (gradient boosted
  *   trees or a small neural net) taking in weather/traffic/activity/transport signals,
  *   time-of-day, mode, and anonymized historical demo-labeled data. It must output a
@@ -107,7 +109,7 @@ async function buildSegments(
   }));
 }
 
-function buildFactors(rand: () => number, kind: RouteKind): ContextFactor[] {
+function buildFactors(rand: () => number, kind: RouteKind, context: ContextSnapshot): ContextFactor[] {
   return [
     {
       key: "activity",
@@ -133,8 +135,10 @@ function buildFactors(rand: () => number, kind: RouteKind): ContextFactor[] {
     {
       key: "weather",
       label: "Weather conditions",
-      impact: rand() > 0.5 ? "positive" : "neutral",
-      description: "Forecast conditions along the route corridor (demo signal).",
+      impact: context.weather.impact,
+      description: context.weather.isReal
+        ? "Real current conditions near your destination, from OpenWeatherMap."
+        : "Forecast conditions along the route corridor (demo signal).",
       weight: Math.round(20 + rand() * 40),
     },
   ];
@@ -191,7 +195,7 @@ async function buildRoute(
     distanceKm: kind === "fastest" ? baseDistance : Number((baseDistance * (1 + rand() * 0.2)).toFixed(1)),
     estimatedContextScore: scoreForKind(rand, kind, priorities?.safetyWeight ?? 50),
     confidence: confidenceForKind(rand),
-    factors: buildFactors(rand, kind),
+    factors: buildFactors(rand, kind, context),
     segments,
     explanations,
     uncertaintyNote: usingRealRoute
@@ -232,7 +236,7 @@ export interface RouteComparison {
 
 export async function compareRoutes(request: JourneyRequest): Promise<RouteComparison> {
   const [context, realRoute] = await Promise.all([
-    getContextSnapshot(`${request.origin}|${request.destination}`),
+    getContextSnapshot(`${request.origin}|${request.destination}`, request.destination),
     tryGetRealRoute(request),
   ]);
   const [fastest, safer, balanced] = await Promise.all([

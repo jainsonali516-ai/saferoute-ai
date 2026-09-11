@@ -72,6 +72,8 @@ export interface ContextSnapshot {
     condition: "clear" | "rain" | "fog" | "storm";
     tempC: number;
     impact: ImpactDirection;
+    /** True when sourced from a real forecast API rather than the demo generator. */
+    isReal?: boolean;
   };
   traffic: {
     level: "light" | "moderate" | "heavy";
