@@ -9,6 +9,7 @@ import {
   TravelMode,
 } from "@/lib/types";
 import { getContextSnapshot } from "@/lib/server/contextEngine";
+import { getMapsProvider, RealRouteResult } from "@/lib/server/providers/mapsProvider";
 import { pick, seededHash, seededRandom } from "@/lib/utils";
 
 /**
@@ -18,8 +19,13 @@ import { pick, seededHash, seededRandom } from "@/lib/utils";
  * Balanced RouteOptions.
  *
  * REAL INTEGRATION POINTS:
- * - Route geometry, distance, base ETA -> Google Directions / Mapbox Directions API
- *   (MAPS_API_KEY, see .env.example)
+ * - Route geometry, distance, base ETA -> now wired to Mapbox Geocoding + Directions
+ *   (see providers/mapsProvider.ts) whenever MAPBOX_ACCESS_TOKEN is set (.env.example).
+ *   With no token configured, or if geocoding/directions fails for any reason, this
+ *   falls back to the synthetic generator below — the app must never break because a
+ *   real API is unavailable. Only the Fastest route's distance/ETA/segments come from
+ *   real map data; Safer/Balanced are still derived estimates layered on top of it,
+ *   and the context/safety scoring below is always simulated (no free API provides that).
  * - Context-aware risk/exposure scoring -> a trained ML model service (gradient boosted
  *   trees or a small neural net) taking in weather/traffic/activity/transport signals,
  *   time-of-day, mode, and anonymized historical demo-labeled data. It must output a
@@ -57,8 +63,23 @@ const EXPLANATION_LIBRARY: Record<RouteKind, string[]> = {
   ],
 };
 
-function buildSegments(rand: () => number, mode: TravelMode, count: number): RouteSegment[] {
+function buildSegments(rand: () => number, mode: TravelMode, count: number, realSteps?: RealRouteResult["steps"]): RouteSegment[] {
   const levels = ["low", "moderate", "high"] as const;
+
+  if (realSteps && realSteps.length > 0) {
+    // Real step names/distances from Mapbox; activity/lighting stay simulated —
+    // no free API provides that signal.
+    return realSteps.map((step, i) => ({
+      id: `seg-${i}`,
+      name: step.name,
+      distanceKm: Number(step.distanceKm.toFixed(1)),
+      mode,
+      description: "Real route segment from map data. Activity/lighting levels are simulated demo signals.",
+      activityLevel: pick(rand, levels),
+      lightingLevel: pick(rand, levels),
+    }));
+  }
+
   return Array.from({ length: count }, (_, i) => ({
     id: `seg-${i}`,
     name: pick(rand, SEGMENT_NAMES),
@@ -122,13 +143,18 @@ function etaForKind(rand: () => number, baseMinutes: number, kind: RouteKind, mi
   return Math.round(baseMinutes * (1.05 + rand() * 0.1) * walkingPenalty);
 }
 
-async function buildRoute(request: JourneyRequest, kind: RouteKind, context: ContextSnapshot): Promise<RouteOption> {
+async function buildRoute(
+  request: JourneyRequest,
+  kind: RouteKind,
+  context: ContextSnapshot,
+  realRoute: RealRouteResult | null,
+): Promise<RouteOption> {
   const seedKey = `${request.origin}|${request.destination}|${request.mode}|${kind}`;
   const rand = seededRandom(seededHash(seedKey));
   const priorities = request.priorities;
 
-  const baseMinutes = Math.round(12 + rand() * 30);
-  const baseDistance = Number((1.2 + rand() * 6).toFixed(1));
+  const baseMinutes = realRoute ? realRoute.durationMinutes : Math.round(12 + rand() * 30);
+  const baseDistance = realRoute ? realRoute.distanceKm : Number((1.2 + rand() * 6).toFixed(1));
 
   const explanations = [...EXPLANATION_LIBRARY[kind]];
   if (context.weather.impact === "positive" && kind !== "fastest") {
@@ -137,6 +163,8 @@ async function buildRoute(request: JourneyRequest, kind: RouteKind, context: Con
   if (priorities?.wheelchairAccessible) {
     explanations.push("Filtered to wheelchair-accessible paths per your preferences");
   }
+
+  const usingRealRoute = Boolean(realRoute) && kind === "fastest";
 
   return {
     id: `${kind}-${seededHash(seedKey)}`,
@@ -147,12 +175,35 @@ async function buildRoute(request: JourneyRequest, kind: RouteKind, context: Con
     estimatedContextScore: scoreForKind(rand, kind, priorities?.safetyWeight ?? 50),
     confidence: confidenceForKind(rand),
     factors: buildFactors(rand, kind),
-    segments: buildSegments(rand, request.mode, 3 + Math.floor(rand() * 2)),
+    segments: buildSegments(rand, request.mode, 3 + Math.floor(rand() * 2), usingRealRoute ? realRoute?.steps : undefined),
     explanations,
-    uncertaintyNote:
-      "Estimate based on demo context signals (time of day, mock weather/traffic/activity). Not a guarantee of safety.",
+    uncertaintyNote: usingRealRoute
+      ? "Distance and travel time are from real map data; the context/safety score is still a demo estimate, not a guarantee of safety."
+      : "Estimate based on demo context signals (time of day, mock weather/traffic/activity). Not a guarantee of safety.",
     isDemoData: true,
   };
+}
+
+/**
+ * Attempts a real geocode + directions lookup. Returns null (never throws)
+ * whenever real maps aren't configured, a place can't be geocoded, or the
+ * Directions API call fails — callers must fall back to the synthetic
+ * generator in that case.
+ */
+async function tryGetRealRoute(request: JourneyRequest): Promise<RealRouteResult | null> {
+  const provider = getMapsProvider();
+  if (!provider) return null;
+
+  try {
+    const [origin, destination] = await Promise.all([
+      provider.geocode(request.origin),
+      provider.geocode(request.destination),
+    ]);
+    if (!origin || !destination) return null;
+    return await provider.getRoute(origin, destination, request.mode);
+  } catch {
+    return null;
+  }
 }
 
 export interface RouteComparison {
@@ -163,11 +214,14 @@ export interface RouteComparison {
 }
 
 export async function compareRoutes(request: JourneyRequest): Promise<RouteComparison> {
-  const context = await getContextSnapshot(`${request.origin}|${request.destination}`);
+  const [context, realRoute] = await Promise.all([
+    getContextSnapshot(`${request.origin}|${request.destination}`),
+    tryGetRealRoute(request),
+  ]);
   const [fastest, safer, balanced] = await Promise.all([
-    buildRoute(request, "fastest", context),
-    buildRoute(request, "safer", context),
-    buildRoute(request, "balanced", context),
+    buildRoute(request, "fastest", context, realRoute),
+    buildRoute(request, "safer", context, realRoute),
+    buildRoute(request, "balanced", context, realRoute),
   ]);
   return { fastest, safer, balanced, context };
 }
