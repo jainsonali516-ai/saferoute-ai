@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { getContextSnapshot } from "@/lib/server/contextEngine";
 import { getMapsProvider, RealRouteResult } from "@/lib/server/providers/mapsProvider";
+import { lightingProvider } from "@/lib/server/providers/lightingProvider";
 import { pick, seededHash, seededRandom } from "@/lib/utils";
 
 /**
@@ -63,21 +64,36 @@ const EXPLANATION_LIBRARY: Record<RouteKind, string[]> = {
   ],
 };
 
-function buildSegments(rand: () => number, mode: TravelMode, count: number, realSteps?: RealRouteResult["steps"]): RouteSegment[] {
+async function buildSegments(
+  rand: () => number,
+  mode: TravelMode,
+  count: number,
+  realSteps?: RealRouteResult["steps"],
+): Promise<RouteSegment[]> {
   const levels = ["low", "moderate", "high"] as const;
 
   if (realSteps && realSteps.length > 0) {
-    // Real step names/distances from Mapbox; activity/lighting stay simulated —
-    // no free API provides that signal.
-    return realSteps.map((step, i) => ({
-      id: `seg-${i}`,
-      name: step.name,
-      distanceKm: Number(step.distanceKm.toFixed(1)),
-      mode,
-      description: "Real route segment from map data. Activity/lighting levels are simulated demo signals.",
-      activityLevel: pick(rand, levels),
-      lightingLevel: pick(rand, levels),
-    }));
+    // Real step names/distances from Mapbox. Lighting is looked up per-segment
+    // from OpenStreetMap's `lit` tag (free, keyless, no crime/incident data
+    // involved) when the segment has a real coordinate and OSM has mapped it;
+    // otherwise falls back to a simulated level. Activity always stays
+    // simulated — no free API provides that signal.
+    return Promise.all(
+      realSteps.map(async (step, i) => {
+        const realLighting = step.location ? await lightingProvider.getLightingLevel(step.location) : null;
+        return {
+          id: `seg-${i}`,
+          name: step.name,
+          distanceKm: Number(step.distanceKm.toFixed(1)),
+          mode,
+          description: realLighting
+            ? "Real route segment from map data; lighting level from OpenStreetMap."
+            : "Real route segment from map data. Lighting level is a simulated demo signal.",
+          activityLevel: pick(rand, levels),
+          lightingLevel: realLighting ?? pick(rand, levels),
+        };
+      }),
+    );
   }
 
   return Array.from({ length: count }, (_, i) => ({
@@ -165,6 +181,7 @@ async function buildRoute(
   }
 
   const usingRealRoute = Boolean(realRoute) && kind === "fastest";
+  const segments = await buildSegments(rand, request.mode, 3 + Math.floor(rand() * 2), usingRealRoute ? realRoute?.steps : undefined);
 
   return {
     id: `${kind}-${seededHash(seedKey)}`,
@@ -175,7 +192,7 @@ async function buildRoute(
     estimatedContextScore: scoreForKind(rand, kind, priorities?.safetyWeight ?? 50),
     confidence: confidenceForKind(rand),
     factors: buildFactors(rand, kind),
-    segments: buildSegments(rand, request.mode, 3 + Math.floor(rand() * 2), usingRealRoute ? realRoute?.steps : undefined),
+    segments,
     explanations,
     uncertaintyNote: usingRealRoute
       ? "Distance and travel time are from real map data; the context/safety score is still a demo estimate, not a guarantee of safety."

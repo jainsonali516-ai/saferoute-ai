@@ -20,6 +20,8 @@ export interface Coordinates {
 export interface RealRouteStep {
   name: string;
   distanceKm: number;
+  /** Where this step starts — lets downstream signals (e.g. real lighting data) be looked up per segment. */
+  location?: Coordinates;
 }
 
 export interface RealRouteResult {
@@ -67,7 +69,7 @@ function mapboxProfile(mode: TravelMode): "walking" | "driving" | "cycling" {
 }
 
 /** Downsamples turn-by-turn steps into a handful of representative segments. */
-function condenseSteps(steps: { name: string; distanceKm: number }[], targetCount = 5): RealRouteStep[] {
+function condenseSteps(steps: RealRouteStep[], targetCount = 5): RealRouteStep[] {
   const meaningful = steps.filter((s) => s.distanceKm > 0.03);
   if (meaningful.length <= targetCount) return meaningful;
 
@@ -78,6 +80,7 @@ function condenseSteps(steps: { name: string; distanceKm: number }[], targetCoun
     condensed.push({
       name: bucket[0].name,
       distanceKm: Number(bucket.reduce((sum, s) => sum + s.distanceKm, 0).toFixed(2)),
+      location: bucket[0].location,
     });
   }
   return condensed;
@@ -92,7 +95,7 @@ interface MapboxDirectionsResponse {
     distance: number; // meters
     duration: number; // seconds
     legs: {
-      steps: { distance: number; maneuver?: { instruction?: string } }[];
+      steps: { distance: number; maneuver?: { instruction?: string; location?: [number, number] } }[];
     }[];
   }[];
 }
@@ -116,10 +119,11 @@ export class MapboxMapsProvider implements MapsProvider {
     const route = data?.routes?.[0];
     if (!route) return null;
 
-    const rawSteps = route.legs.flatMap((leg) =>
+    const rawSteps: RealRouteStep[] = route.legs.flatMap((leg) =>
       leg.steps.map((step) => ({
         name: step.maneuver?.instruction || "Route segment",
         distanceKm: step.distance / 1000,
+        location: step.maneuver?.location ? { lng: step.maneuver.location[0], lat: step.maneuver.location[1] } : undefined,
       })),
     );
 
