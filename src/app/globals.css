@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0710;
+  --background-elevated: #120c1c;
+  --foreground: #f4eefc;
+  --muted: #a89bc2;
+  --brand-pink: #ff4d9d;
+  --brand-magenta: #b83bff;
+  --brand-gradient: linear-gradient(135deg, #ff4d9d 0%, #b83bff 100%);
+  --danger: #ff5470;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --border-soft: rgba(255, 255, 255, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-brand-pink: var(--brand-pink);
+  --color-brand-magenta: var(--brand-magenta);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-inter);
+}
+
+* {
+  border-color: var(--border-soft);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(184, 59, 255, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(255, 77, 157, 0.14), transparent 55%),
+    var(--background);
+  color: var(--foreground);
+  min-height: 100dvh;
+}
+
+::selection {
+  background: rgba(255, 77, 157, 0.35);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-soft);
+  border-radius: 1.25rem;
+}
+
+.glass-card-hover {
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 77, 157, 0.35);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.brand-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-gradient-bg {
+  background: var(--brand-gradient);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--brand-pink);
+  outline-offset: 2px;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 84, 112, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(255, 84, 112, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 84, 112, 0);
+  }
+}
+
+.emergency-pulse {
+  animation: pulse-ring 2.2s infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.4s ease both;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 77, 157, 0.4);
+  border-radius: 999px;
+}
