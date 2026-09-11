@@ -7,17 +7,12 @@ import { Disclaimer } from "@/components/ui/Disclaimer";
 import { TravelMode, UserPreferences } from "@/lib/types";
 import { getPreferences, updatePreferences } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+import { DEFAULT_DEMO_USER, DEMO_USERS, toUserPreferences } from "@/lib/demoData/users";
+import { DemoBadge } from "@/components/ui/Disclaimer";
 
 const STORAGE_KEY = "sra_preferences_demo_fallback";
 
-const DEFAULT_PREFS: UserPreferences = {
-  preferredModes: ["walking", "public_transport"],
-  walkingTolerance: "medium",
-  routePriority: 60,
-  wheelchairAccessible: false,
-  avoidStairs: false,
-  avoidPoorlyLit: true,
-};
+const DEFAULT_PREFS: UserPreferences = toUserPreferences(DEFAULT_DEMO_USER);
 
 const MODES: { value: TravelMode; label: string }[] = [
   { value: "walking", label: "Walking" },
@@ -41,6 +36,14 @@ export default function PreferencesPage() {
   const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFS);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [activeProfileId, setActiveProfileId] = useState(DEFAULT_DEMO_USER.id);
+
+  function applyDemoProfile(profileId: string) {
+    const profile = DEMO_USERS.find((u) => u.id === profileId);
+    if (!profile) return;
+    setActiveProfileId(profileId);
+    setPrefs(toUserPreferences(profile));
+  }
 
   useEffect(() => {
     getPreferences()
@@ -86,7 +89,10 @@ export default function PreferencesPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Preferences</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold sm:text-3xl">Preferences</h1>
+        <DemoBadge />
+      </div>
       <p className="mt-1.5 text-sm text-muted">Tune how routes are personalized for you.</p>
 
       <div className="mt-6 space-y-5">
@@ -94,6 +100,29 @@ export default function PreferencesPage() {
           <GlassCard className="h-48 animate-pulse" />
         ) : (
           <>
+            <GlassCard>
+              <h2 className="mb-1 text-sm font-semibold">Demo profile</h2>
+              <p className="mb-3 text-xs text-muted">
+                Try preferences from a different simulated traveler — this just fills in the fields below.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {DEMO_USERS.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => applyDemoProfile(u.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-ring",
+                      activeProfileId === u.id
+                        ? "border-brand-pink/50 bg-brand-pink/15 text-foreground"
+                        : "border-white/10 bg-white/[0.03] text-muted",
+                    )}
+                  >
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+            </GlassCard>
+
             <GlassCard>
               <h2 className="mb-3 text-sm font-semibold">Preferred transport modes</h2>
               <div className="grid grid-cols-2 gap-2">

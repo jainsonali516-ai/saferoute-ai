@@ -1,17 +1,13 @@
 import { UserPreferences } from "@/lib/types";
+import { DEFAULT_DEMO_USER, toUserPreferences } from "@/lib/demoData/users";
 
 /**
  * DEMO MODE in-memory preferences store, keyed by userId.
+ * Defaults to the demo account's (Aanya Sharma) preferences so the whole app
+ * uses the same demo user consistently until preferences are explicitly saved.
  * REAL INTEGRATION: swap for a `UserPreference` table (see prisma/schema.prisma).
  */
-const DEFAULT_PREFERENCES: UserPreferences = {
-  preferredModes: ["walking", "public_transport"],
-  walkingTolerance: "medium",
-  routePriority: 60,
-  wheelchairAccessible: false,
-  avoidStairs: false,
-  avoidPoorlyLit: true,
-};
+const DEFAULT_PREFERENCES: UserPreferences = toUserPreferences(DEFAULT_DEMO_USER);
 
 const store = new Map<string, UserPreferences>();
 

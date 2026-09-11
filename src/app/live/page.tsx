@@ -8,11 +8,25 @@ import { Disclaimer, DemoBadge } from "@/components/ui/Disclaimer";
 import { TrustedContact, Journey } from "@/lib/types";
 import { getContacts, startJourney, getJourney, checkIn, completeJourney } from "@/lib/api/client";
 import { formatMinutes } from "@/lib/utils";
+import { LIVE_JOURNEY_EXAMPLES } from "@/lib/demoData";
+import { LiveJourneyExample } from "@/lib/demoData/types";
+import { Badge } from "@/components/ui/Badge";
 
 const CHECK_IN_INTERVAL_SECONDS = 45; // shortened for demo purposes
 const POLL_INTERVAL_MS = 4000;
 
 function LiveJourneyContent() {
+  const searchParams = useSearchParams();
+  const hasRealJourney = Boolean(searchParams.get("origin"));
+
+  if (!hasRealJourney) {
+    return <DemoLiveJourneyPicker />;
+  }
+
+  return <ActiveJourneyView />;
+}
+
+function ActiveJourneyView() {
   const searchParams = useSearchParams();
   const origin = searchParams.get("origin") ?? "Your start point";
   const destination = searchParams.get("destination") ?? "Your destination";
@@ -231,6 +245,84 @@ function LiveJourneyContent() {
         🚨 Emergency Help
       </LinkButton>
     </div>
+  );
+}
+
+function DemoLiveJourneyPicker() {
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-bold sm:text-3xl">Live Journey</h1>
+        <DemoBadge />
+      </div>
+      <p className="mt-1 text-sm text-muted">
+        No trip is currently in progress. Here are simulated live-journey snapshots to show what
+        this screen looks like mid-trip.
+      </p>
+
+      <div className="mt-6 space-y-4">
+        {LIVE_JOURNEY_EXAMPLES.map((ex) => (
+          <LiveExampleCard key={ex.id} example={ex} />
+        ))}
+      </div>
+
+      <Disclaimer className="mt-4">
+        Demo / Simulated Data — these are illustrative snapshots, not a live feed of a real trip.
+      </Disclaimer>
+
+      <LinkButton href="/plan" fullWidth size="lg" className="mt-6">
+        Plan a real journey →
+      </LinkButton>
+    </div>
+  );
+}
+
+function LiveExampleCard({ example }: { example: LiveJourneyExample }) {
+  return (
+    <GlassCard>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">{example.label}</p>
+          <p className="text-xs text-muted">
+            {example.origin} → {example.destination}
+          </p>
+        </div>
+        <Badge tone="brand">{example.progressPct}% complete</Badge>
+      </div>
+
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/8">
+        <div className="h-full rounded-full brand-gradient-bg" style={{ width: `${example.progressPct}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-muted">
+        {example.remainingDistanceKm} km · {formatMinutes(example.remainingMinutes)} remaining
+      </p>
+
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-muted">
+          Traffic: {example.currentTraffic}
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-muted">
+          Weather: {example.currentWeather}
+        </span>
+        <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-muted">
+          Activity: {example.currentActivity}
+        </span>
+      </div>
+
+      <p className="mt-3 text-xs text-muted">
+        Last check-in {example.lastCheckIn} · Next reminder {example.nextCheckInReminder}
+      </p>
+
+      {example.checkIns.length > 0 && (
+        <ul className="mt-2 space-y-1 border-t border-white/5 pt-2 text-xs text-muted">
+          {example.checkIns.map((c, i) => (
+            <li key={i}>
+              ✓ {c.time} — {c.note}
+            </li>
+          ))}
+        </ul>
+      )}
+    </GlassCard>
   );
 }
 
