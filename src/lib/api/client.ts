@@ -179,3 +179,20 @@ export function updateContact(id: string, input: TrustedContactInput): Promise<T
 export function deleteContact(id: string): Promise<void> {
   return trustedContactsService.remove(id);
 }
+
+// --- Emergency alerts ---------------------------------------------------
+
+export interface EmergencyAlertResult {
+  contactId: string;
+  name: string;
+  sent: boolean;
+  demo: boolean;
+  error?: string;
+}
+
+export function sendEmergencyAlert(shareUrl?: string): Promise<EmergencyAlertResult[]> {
+  return request<{ results: EmergencyAlertResult[] }>("/api/emergency/alert", {
+    method: "POST",
+    body: JSON.stringify(shareUrl ? { shareUrl } : {}),
+  }).then((wire) => wire.results);
+}

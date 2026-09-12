@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react";
 import { EMERGENCY_NUMBERS } from "@/lib/mock/emergencyNumbers";
 import { TrustedContact, TrustedContactInput } from "@/lib/types";
-import { getContacts, addContact, updateContact, deleteContact, getNearbyHelp, NearbyHelpPlace } from "@/lib/api/client";
+import {
+  getContacts,
+  addContact,
+  updateContact,
+  deleteContact,
+  getNearbyHelp,
+  NearbyHelpPlace,
+  sendEmergencyAlert,
+  EmergencyAlertResult,
+} from "@/lib/api/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Disclaimer } from "@/components/ui/Disclaimer";
@@ -23,6 +32,22 @@ export default function EmergencyPage() {
   const [editingContact, setEditingContact] = useState<TrustedContact | null>(null);
   const [nearbyHelp, setNearbyHelp] = useState<NearbyHelpPlace[]>([]);
   const [nearbyHelpState, setNearbyHelpState] = useState<NearbyHelpState>("idle");
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertResults, setAlertResults] = useState<EmergencyAlertResult[] | null>(null);
+  const [alertError, setAlertError] = useState<string | null>(null);
+
+  async function handleSendAlert() {
+    setAlertBusy(true);
+    setAlertError(null);
+    try {
+      const results = await sendEmergencyAlert();
+      setAlertResults(results);
+    } catch (err) {
+      setAlertError(err instanceof Error ? err.message : "Couldn't send alerts.");
+    } finally {
+      setAlertBusy(false);
+    }
+  }
 
   function findNearbyHelp() {
     if (!("geolocation" in navigator)) {
@@ -125,6 +150,28 @@ export default function EmergencyPage() {
                 </Button>
               )}
             </div>
+
+            {contacts.length > 0 && (
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <Button size="sm" variant="danger" fullWidth onClick={handleSendAlert} disabled={alertBusy}>
+                  {alertBusy ? "Sending SMS alert…" : `📩 SMS Alert ${contacts.length > 1 ? "All Contacts" : contacts[0].name}`}
+                </Button>
+
+                {alertError && <p className="mt-2 text-xs text-danger">{alertError}</p>}
+
+                {alertResults && (
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {alertResults.map((r) => (
+                      <li key={r.contactId} className={r.sent ? "text-success" : "text-danger"}>
+                        {r.sent ? "✓" : "✗"} {r.name}
+                        {r.demo && " (demo — no SMS credentials configured, logged server-side only)"}
+                        {r.error && `: ${r.error}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
       </GlassCard>
