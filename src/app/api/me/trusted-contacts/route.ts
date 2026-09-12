@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  if (isDuplicateContact(userId, data)) {
+  if (await isDuplicateContact(userId, data)) {
     return NextResponse.json(
       { error: "A trusted contact with this phone number already exists." },
       { status: 409 },

@@ -55,7 +55,7 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  if (isDuplicateContact(userId, data, id)) {
+  if (await isDuplicateContact(userId, data, id)) {
     return NextResponse.json(
       { error: "A trusted contact with this phone number already exists." },
       { status: 409 },
