@@ -1,4 +1,4 @@
-import { Journey, JourneyCheckIn, RouteKind, TravelMode } from "@/lib/types";
+import { Journey, JourneyCheckIn, JourneyLocation, RouteKind, SharedJourneyView, TravelMode } from "@/lib/types";
 import { randomUUID } from "crypto";
 
 /**
@@ -47,6 +47,7 @@ export function startJourney(id: string, userId: string, input: StartJourneyInpu
     shareWithContactId: input.shareWithContactId ?? null,
     checkIns: [],
     completedAt: null,
+    lastLocation: null,
     isDemoData: true,
   };
   journeys.set(id, journey);
@@ -93,4 +94,38 @@ export function completeJourney(id: string, userId: string): Journey | null {
   const updated: Journey = { ...journey, status: "completed", completedAt: new Date().toISOString() };
   journeys.set(id, updated);
   return updated;
+}
+
+export function updateLocation(id: string, userId: string, lat: number, lng: number): Journey | null {
+  const journey = getJourney(id, userId);
+  if (!journey) return null;
+
+  const lastLocation: JourneyLocation = { lat, lng, updatedAt: new Date().toISOString() };
+  const updated: Journey = { ...journey, lastLocation };
+  journeys.set(id, updated);
+  return updated;
+}
+
+/**
+ * Public read for the share link (/share/[id]) — deliberately takes no userId.
+ * The journey id itself (a random UUID) acts as the unguessable share token, so
+ * this only ever returns the small public-safe subset, never the full Journey.
+ */
+export function getSharedJourney(id: string): SharedJourneyView | null {
+  const journey = journeys.get(id);
+  if (!journey) return null;
+  const { status } =
+    journey.status === "active" && new Date(journey.expectedArrivalAt).getTime() < Date.now()
+      ? { status: "overdue" as const }
+      : journey;
+
+  return {
+    id: journey.id,
+    origin: journey.origin,
+    destination: journey.destination,
+    status,
+    startedAt: journey.startedAt,
+    expectedArrivalAt: journey.expectedArrivalAt,
+    lastLocation: journey.lastLocation,
+  };
 }

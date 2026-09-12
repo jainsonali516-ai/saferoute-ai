@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Disclaimer, DemoBadge } from "@/components/ui/Disclaimer";
 import { TrustedContact, Journey } from "@/lib/types";
-import { getContacts, startJourney, getJourney, checkIn, completeJourney } from "@/lib/api/client";
+import { getContacts, startJourney, getJourney, checkIn, completeJourney, updateJourneyLocation } from "@/lib/api/client";
 import { formatMinutes } from "@/lib/utils";
 import { LIVE_JOURNEY_EXAMPLES } from "@/lib/demoData";
 import { LiveJourneyExample } from "@/lib/demoData/types";
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 
 const CHECK_IN_INTERVAL_SECONDS = 45; // shortened for demo purposes
 const POLL_INTERVAL_MS = 4000;
+const LOCATION_UPDATE_INTERVAL_MS = 15000;
 
 function LiveJourneyContent() {
   const searchParams = useSearchParams();
@@ -54,6 +55,27 @@ function ActiveJourneyView() {
   useEffect(() => {
     getContacts().then(setContacts).catch(() => setContacts([]));
   }, []);
+
+  // Report the traveler's real device location periodically while sharing is on.
+  useEffect(() => {
+    if (!sharing || completed || !("geolocation" in navigator)) return;
+    const report = () => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          updateJourneyLocation(journeyId, position.coords.latitude, position.coords.longitude).catch(() => {
+            /* best-effort — a missed location update shouldn't interrupt the trip */
+          });
+        },
+        () => {
+          /* location permission denied or unavailable — sharing stays on, just without a live pin */
+        },
+        { timeout: 10000 },
+      );
+    };
+    report();
+    const id = setInterval(report, LOCATION_UPDATE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [sharing, completed, journeyId]);
 
   // Start the journey on the backend once (Journey lifecycle: start -> check-in* -> complete).
   useEffect(() => {
@@ -203,26 +225,21 @@ function ActiveJourneyView() {
       <GlassCard className="mt-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">Share live trip</p>
+            <p className="text-sm font-semibold">Share live location</p>
             <p className="text-xs text-muted">
-              {primaryContact ? `Share status updates with ${primaryContact.name}` : "Add a trusted contact to enable sharing"}
+              {primaryContact ? `Get a link to send to ${primaryContact.name}` : "Add a trusted contact, or just share the link with anyone"}
             </p>
           </div>
           <button
             role="switch"
             aria-checked={sharing}
-            disabled={!primaryContact}
             onClick={() => setSharing((v) => !v)}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-ring disabled:opacity-40 ${sharing ? "brand-gradient-bg" : "bg-white/12"}`}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-ring ${sharing ? "brand-gradient-bg" : "bg-white/12"}`}
           >
             <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${sharing ? "translate-x-5" : "translate-x-0.5"}`} />
           </button>
         </div>
-        {sharing && (
-          <p className="mt-3 text-xs text-success">
-            Demo only — {primaryContact?.name} would receive periodic status updates, not your precise live location history.
-          </p>
-        )}
+        {sharing && <ShareLink journeyId={journeyId} />}
       </GlassCard>
 
       {journey && journey.checkIns.length > 0 && (
@@ -244,6 +261,35 @@ function ActiveJourneyView() {
       <LinkButton href="/emergency" variant="emergency" fullWidth size="lg" className="mt-6">
         🚨 Emergency Help
       </LinkButton>
+    </div>
+  );
+}
+
+function ShareLink({ journeyId }: { journeyId: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/share/${journeyId}` : "";
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard access can be blocked — the link is still shown for manual copy */
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+        <span className="flex-1 truncate text-xs text-muted">{url}</span>
+        <button onClick={handleCopy} className="shrink-0 text-xs font-semibold text-brand focus-ring">
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-success">
+        Anyone with this link can see your live location and trip status until the trip ends.
+      </p>
     </div>
   );
 }

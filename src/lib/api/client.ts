@@ -4,6 +4,7 @@ import {
   Journey,
   JourneyRequest,
   PrivacySettings,
+  SharedJourneyView,
   TrustedContact,
   TrustedContactInput,
   UserPreferences,
@@ -125,6 +126,17 @@ export function checkIn(id: string): Promise<Journey> {
 
 export function completeJourney(id: string): Promise<Journey> {
   return request<Journey>(`/api/journeys/${id}/complete`, { method: "POST" });
+}
+
+export function updateJourneyLocation(id: string, lat: number, lng: number): Promise<Journey> {
+  return request<Journey>(`/api/journeys/${id}/location`, {
+    method: "PATCH",
+    body: JSON.stringify({ lat, lng }),
+  });
+}
+
+export function getSharedJourney(id: string): Promise<SharedJourneyView> {
+  return request<SharedJourneyView>(`/api/journeys/${id}/share`);
 }
 
 // --- Preferences --------------------------------------------------------------

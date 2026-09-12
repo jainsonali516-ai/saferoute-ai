@@ -141,6 +141,12 @@ export interface JourneyCheckIn {
   status: "ok";
 }
 
+export interface JourneyLocation {
+  lat: number;
+  lng: number;
+  updatedAt: string;
+}
+
 export interface Journey {
   id: string;
   userId: string;
@@ -157,7 +163,20 @@ export interface Journey {
   shareWithContactId: string | null;
   checkIns: JourneyCheckIn[];
   completedAt: string | null;
+  /** Traveler's real device location, set via PATCH /api/journeys/[id]/location. Null until first update. */
+  lastLocation: JourneyLocation | null;
   isDemoData: true;
+}
+
+/** Public-safe subset exposed via GET /api/journeys/[id]/share — no auth, journey id itself is the share token. */
+export interface SharedJourneyView {
+  id: string;
+  origin: string;
+  destination: string;
+  status: JourneyStatus;
+  startedAt: string;
+  expectedArrivalAt: string;
+  lastLocation: JourneyLocation | null;
 }
 
 /** Standard envelope every /api/* route returns. */
