@@ -80,6 +80,22 @@ export async function getContext(): Promise<ContextSnapshot> {
   };
 }
 
+// --- Nearby help ------------------------------------------------------------
+
+export interface NearbyHelpPlace {
+  id: string;
+  name: string;
+  type: "police" | "hospital" | "fire_station";
+  distanceKm: number;
+  location: { lat: number; lng: number };
+}
+
+export function getNearbyHelp(lat: number, lng: number): Promise<NearbyHelpPlace[]> {
+  return request<{ places: NearbyHelpPlace[] }>(`/api/context/nearby-help?lat=${lat}&lng=${lng}`).then(
+    (wire) => wire.places,
+  );
+}
+
 // --- Journeys ---------------------------------------------------------------
 
 export interface StartJourneyInput {

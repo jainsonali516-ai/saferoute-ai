@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { EMERGENCY_NUMBERS } from "@/lib/mock/emergencyNumbers";
 import { TrustedContact, TrustedContactInput } from "@/lib/types";
-import { getContacts, addContact, updateContact, deleteContact } from "@/lib/api/client";
+import { getContacts, addContact, updateContact, deleteContact, getNearbyHelp, NearbyHelpPlace } from "@/lib/api/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Disclaimer } from "@/components/ui/Disclaimer";
 import { OfficialNumberCard } from "@/components/emergency/OfficialNumberCard";
 import { TrustedContactCard } from "@/components/emergency/TrustedContactCard";
+import { NearbyHelpCard } from "@/components/emergency/NearbyHelpCard";
 import { AddContactModal } from "@/components/emergency/AddContactModal";
 
 type LoadState = "loading" | "ready" | "error";
+type NearbyHelpState = "idle" | "locating" | "loading" | "ready" | "denied" | "error";
 
 export default function EmergencyPage() {
   const [emergencyMode, setEmergencyMode] = useState(false);
@@ -19,6 +21,29 @@ export default function EmergencyPage() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<TrustedContact | null>(null);
+  const [nearbyHelp, setNearbyHelp] = useState<NearbyHelpPlace[]>([]);
+  const [nearbyHelpState, setNearbyHelpState] = useState<NearbyHelpState>("idle");
+
+  function findNearbyHelp() {
+    if (!("geolocation" in navigator)) {
+      setNearbyHelpState("error");
+      return;
+    }
+    setNearbyHelpState("locating");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setNearbyHelpState("loading");
+        getNearbyHelp(position.coords.latitude, position.coords.longitude)
+          .then((places) => {
+            setNearbyHelp(places);
+            setNearbyHelpState("ready");
+          })
+          .catch(() => setNearbyHelpState("error"));
+      },
+      (err) => setNearbyHelpState(err.code === err.PERMISSION_DENIED ? "denied" : "error"),
+      { timeout: 10000 },
+    );
+  }
 
   function loadContacts() {
     setLoadState("loading");
@@ -115,6 +140,60 @@ export default function EmergencyPage() {
           Emergency numbers are provided for quick access. Availability may vary by location and
           service.
         </Disclaimer>
+      </section>
+
+      <section className="mt-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Nearby Help</h2>
+            <p className="text-xs text-muted">Real police stations, hospitals and fire stations near you.</p>
+          </div>
+          {nearbyHelpState === "idle" && (
+            <Button size="sm" variant="secondary" onClick={findNearbyHelp}>
+              📍 Find Nearby
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-3 space-y-3">
+          {(nearbyHelpState === "locating" || nearbyHelpState === "loading") && (
+            <>
+              <GlassCard className="h-16 animate-pulse" />
+              <GlassCard className="h-16 animate-pulse" />
+            </>
+          )}
+
+          {nearbyHelpState === "denied" && (
+            <GlassCard className="text-center text-sm text-muted">
+              Location access was denied. Allow location access in your browser to see nearby help.
+            </GlassCard>
+          )}
+
+          {nearbyHelpState === "error" && (
+            <GlassCard className="text-center text-sm text-danger">
+              Couldn&apos;t find nearby help right now.
+              <div className="mt-3">
+                <Button size="sm" onClick={findNearbyHelp}>
+                  Retry
+                </Button>
+              </div>
+            </GlassCard>
+          )}
+
+          {nearbyHelpState === "ready" && nearbyHelp.length === 0 && (
+            <GlassCard className="text-center text-sm text-muted">
+              No mapped police stations, hospitals or fire stations found nearby.
+            </GlassCard>
+          )}
+
+          {nearbyHelpState === "ready" && nearbyHelp.map((place) => <NearbyHelpCard key={place.id} place={place} />)}
+        </div>
+
+        {nearbyHelpState === "ready" && (
+          <Disclaimer className="mt-3">
+            Sourced from OpenStreetMap contributor data — may be incomplete or outdated for your area.
+          </Disclaimer>
+        )}
       </section>
 
       <section className="mt-10">
